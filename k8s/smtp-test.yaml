@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: smtp-test
+  namespace: ai-watchdog
+spec:
+  restartPolicy: Never
+  containers:
+    - name: smtp-test
+      image: python:3.12-slim
+      command: ["python", "-c"]
+      args:
+        - |
+          import os, smtplib, ssl
+          from email.message import EmailMessage
+
+          host = os.environ["SMTP_HOST"]
+          user = os.environ["SMTP_USER"]
+          password = os.environ["SMTP_PASSWORD"]
+          sender = os.environ["EMAIL_FROM"]
+          recipient = os.environ["EMAIL_TO"]
+
+          msg = EmailMessage()
+          msg["Subject"] = "Minikube AI Watchdog - SMTP Test"
+          msg["From"] = sender
+          msg["To"] = recipient
+          msg.set_content(
+              "Success! Gmail SMTP is working. "
+              "Your Minikube AI Watchdog email configuration is valid."
+          )
+
+          with smtplib.SMTP(host, 587, timeout=30) as server:
+              server.ehlo()
+              server.starttls(context=ssl.create_default_context())
+              server.ehlo()
+              server.login(user, password)
+              server.send_message(msg)
+
+          print("SMTP_TEST_SUCCESS: test email sent")
+      env:
+        - name: SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              name: watchdog-secrets
+              key: smtp-host
+        - name: SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              name: watchdog-secrets
+              key: smtp-user
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: watchdog-secrets
+              key: smtp-password
+        - name: EMAIL_FROM
+          valueFrom:
+            secretKeyRef:
+              name: watchdog-secrets
+              key: email-from
+        - name: EMAIL_TO
+          valueFrom:
+            secretKeyRef:
+              name: watchdog-secrets
+              key: email-to

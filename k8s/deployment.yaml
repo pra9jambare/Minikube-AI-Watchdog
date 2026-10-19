@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-watchdog
+  namespace: ai-watchdog
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ai-watchdog
+  template:
+    metadata:
+      labels:
+        app: ai-watchdog
+    spec:
+      serviceAccountName: ai-watchdog
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: watcher
+          image: minikube-ai-watchdog:0.1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: WATCH_NAMESPACES
+              value: "default"
+            - name: POLL_SECONDS
+              value: "30"
+            - name: LOG_TAIL_LINES
+              value: "80"
+
+            # Use ollama or openai
+            - name: LLM_PROVIDER
+              value: "ollama"
+            - name: OLLAMA_URL
+              value: "http://ollama:11434"
+            - name: OLLAMA_MODEL
+              value: "qwen2.5:3b"
+            - name: OPENAI_MODEL
+              value: "gpt-4.1-mini"
+
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: watchdog-secrets
+                  key: smtp-host
+            - name: SMTP_PORT
+              value: "587"
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: watchdog-secrets
+                  key: smtp-user
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: watchdog-secrets
+                  key: smtp-password
+            - name: EMAIL_FROM
+              valueFrom:
+                secretKeyRef:
+                  name: watchdog-secrets
+                  key: email-from
+            - name: EMAIL_TO
+              valueFrom:
+                secretKeyRef:
+                  name: watchdog-secrets
+                  key: email-to
+            - name: SMTP_STARTTLS
+              value: "true"
+
+            # OpenAI key is optional; use only with LLM_PROVIDER=openai
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: watchdog-secrets
+                  key: openai-api-key
+                  optional: true
+
+            - name: STATE_DB
+              value: "/data/incidents.sqlite3"
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          volumeMounts:
+            - name: state
+              mountPath: /data
+
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: ai-watchdog-state
